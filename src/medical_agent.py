@@ -1,5 +1,8 @@
 import torch
-from transformers import pipeline
+try:
+    from transformers import pipeline
+except ImportError:
+    pipeline = None
 
 class MedicalLLMAgent:
     """
@@ -12,14 +15,15 @@ class MedicalLLMAgent:
         # using a small instruction-tuned model. In production, this might be Llama-3-8B.
         print(f"Loading local LLM Agent ({model_id})...")
         try:
-            # Using pipeline for text generation. 
-            # In a real environment with bitsandbytes installed, we would add:
-            # model_kwargs={"load_in_4bit": True}
-            self.generator = pipeline(
-                "text-generation", 
-                model=model_id, 
-                device_map="auto"
-            )
+            if pipeline is None:
+                print("Transformers pipeline not available. Running in simulation mode.")
+                self.generator = None
+            else:
+                self.generator = pipeline(
+                    "text-generation", 
+                    model=model_id, 
+                    device_map="auto"
+                )
         except Exception as e:
             print(f"Error loading LLM {model_id}: {e}")
             self.generator = None

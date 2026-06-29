@@ -35,20 +35,54 @@ def main():
     st.sidebar.header("Mission Controls")
     node = st.sidebar.selectbox("Spacecraft Node Selector (Federated Network)", ["Node-1: Artemis V", "Node-2: Mars Transit A", "Node-3: Mars Transit B"])
     
+    scenario = st.sidebar.selectbox("Simulated Clinical Scenario", [
+        "Nominal Mars Transit (Baseline)",
+        "Solar Particle Event (SPE) - Radiation Spike",
+        "Severe Microgravity Osteopenia",
+        "Inhibitor Toxicity / Hepatic Stress",
+        "Supply Chain Failure (No Drug Available)"
+    ])
+    
     timeline = st.sidebar.slider("Mission Timeline (Months)", 0, 24, 6)
     
-    # Simulate Telemetry based on node and timeline
-    np.random.seed(hash(node) % (2**32 - 1) + timeline)
+    # Simulate Telemetry based on Scenario and Timeline
+    np.random.seed(hash(node + scenario) % (2**32 - 1) + timeline)
+    
+    # Default baseline
     current_telemetry = {
-        'heart_rate': np.random.uniform(60, 90),
-        'bone_density': np.random.uniform(-2.5, 0.5),
-        'radiation': np.random.uniform(50, 500) * (timeline / 6),
-        'pgdh': np.random.uniform(2, 9)
+        'heart_rate': np.random.uniform(60, 80),
+        'bone_density': np.random.uniform(-1.5, 0.0),
+        'radiation': np.random.uniform(50, 150) * (timeline / 6),
+        'pgdh': np.random.uniform(2, 5)
     }
     
+    if "Solar Particle Event" in scenario:
+        current_telemetry['radiation'] += np.random.uniform(500, 1000)
+        current_telemetry['pgdh'] += np.random.uniform(5, 10)
+    elif "Severe Microgravity" in scenario:
+        current_telemetry['bone_density'] = np.random.uniform(-3.5, -2.5)
+        current_telemetry['pgdh'] += np.random.uniform(3, 6)
+    elif "Inhibitor Toxicity" in scenario:
+        current_telemetry['heart_rate'] = np.random.uniform(90, 120) # Stress
+        current_telemetry['pgdh'] = np.random.uniform(0.1, 1.0) # Over-suppressed
+    
+    # Calculate ODE outcomes
+    rad_factor = current_telemetry['radiation'] / 1000.0
+    bone_factor = abs(min(0, current_telemetry['bone_density'])) / 5.0
+    
+    matrix_integrity = max(0.01, 1.0 - rad_factor - bone_factor - (timeline/48))
+    
+    if "Supply Chain Failure" in scenario:
+        recommended_drug_dose = 0.0
+        matrix_integrity *= 0.5 # rapid degradation without drug
+    elif "Inhibitor Toxicity" in scenario:
+        recommended_drug_dose = 0.0 # Stop drug
+    else:
+        recommended_drug_dose = min(50.0, current_telemetry['pgdh'] * 2.5 + (timeline))
+
     ode_trajectory = {
-        "final_matrix_integrity": max(0.1, 1.0 - (current_telemetry['radiation']/1000) - (timeline/48)),
-        "recommended_drug_dose": min(50.0, current_telemetry['pgdh'] * 2.5 + (timeline))
+        "final_matrix_integrity": matrix_integrity,
+        "recommended_drug_dose": recommended_drug_dose
     }
 
     # --- Top Row: CMO Summary & Risk Gauges ---
@@ -59,15 +93,24 @@ def main():
         st.subheader("👨‍⚕️ Autonomous CMO Executive Summary")
         risk_score = risk_model.predict_risk(current_telemetry)
         
+        # Adjust risk score based on extreme cases
+        if "Supply Chain Failure" in scenario: risk_score = min(1.0, risk_score + 0.3)
+        if "Inhibitor Toxicity" in scenario: risk_score = min(1.0, risk_score + 0.4)
+        if "Solar Particle" in scenario: risk_score = min(1.0, risk_score + 0.5)
+        
         with st.spinner("Synthesizing clinical recommendation..."):
             summary = cmo_agent.generate_cmo_summary(current_telemetry, risk_score, ode_trajectory)
             
         if "ERROR" in summary or summary == "":
-            summary = (
-                f"**Simulated Summary:** The astronaut's current telemetry indicates a mission failure risk of {risk_score:.2f}. "
-                f"Given the high radiation exposure ({current_telemetry['radiation']:.0f} mSv) and projected matrix integrity of {ode_trajectory['final_matrix_integrity']:.2f}, "
-                f"an immediate dosage of {ode_trajectory['recommended_drug_dose']:.1f} mg 15-PGDH inhibitor is recommended to prevent further cartilage degradation."
-            )
+            if "Inhibitor Toxicity" in scenario:
+                summary = f"**Simulated Summary:** ALERT - Severe hepatic stress detected (Heart Rate: {current_telemetry['heart_rate']:.0f} bpm). 15-PGDH is over-suppressed. HALT 15-PGDH inhibitor immediately despite {ode_trajectory['final_matrix_integrity']*100:.1f}% matrix integrity. Risk: {risk_score:.2f}."
+            elif "Supply Chain Failure" in scenario:
+                summary = f"**Simulated Summary:** WARNING - 15-PGDH inhibitor supply depleted. Matrix integrity projected to collapse to {ode_trajectory['final_matrix_integrity']*100:.1f}%. Initiate load-bearing exercise protocols and structural bracing. Risk: {risk_score:.2f}."
+            elif "Solar Particle Event" in scenario:
+                summary = f"**Simulated Summary:** CRITICAL - Massive SPE radiation dose ({current_telemetry['radiation']:.0f} mSv) detected. Accelerating cartilage breakdown. Administer maximum safe emergency dose of {ode_trajectory['recommended_drug_dose']:.1f} mg inhibitor. Risk: {risk_score:.2f}."
+            else:
+                summary = f"**Simulated Summary:** Nominal transit. Radiation: {current_telemetry['radiation']:.0f} mSv. Projected matrix integrity: {ode_trajectory['final_matrix_integrity']*100:.1f}%. Recommend maintenance dose of {ode_trajectory['recommended_drug_dose']:.1f} mg inhibitor. Risk: {risk_score:.2f}."
+        
         st.info(summary)
         
     with col2:
