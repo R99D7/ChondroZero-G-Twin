@@ -1,0 +1,17 @@
+torch
+torchvision
+torchaudio
+torchdiffeq
+transformers
+diffusers
+accelerate
+bitsandbytes
+xgboost
+flwr
+scipy
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+Pillow

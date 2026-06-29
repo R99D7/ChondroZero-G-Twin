@@ -1,0 +1,20 @@
+# Python caches and environments
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Data and Model Weights (CRITICAL)
+data/raw/
+data/federated_nodes/
+models/weights/
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.h5
+*.pkl
+.huggingface/
+
+# OS generated files
+.DS_Store
