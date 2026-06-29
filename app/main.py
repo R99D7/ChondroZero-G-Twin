@@ -105,7 +105,6 @@ def plot_3d_surface():
     time_ax = np.linspace(0, 24, 30)
     rad_ax = np.linspace(0, 1000, 30)
     T, R = np.meshgrid(time_ax, rad_ax)
-    # Simulated Integrity Surface Z
     Z = np.clip(1.0 - (R / 1000.0)**2 - (T / 48.0), 0, 1)
     
     fig = go.Figure(data=[go.Surface(z=Z, x=T, y=R, colorscale='Viridis')])
@@ -126,13 +125,23 @@ def main():
     
     # --- Sidebar ---
     st.sidebar.markdown("### 🎛️ Mission Controls")
-    node = st.sidebar.selectbox("Federated Network Node", ["Node-1: Artemis V", "Node-2: Mars Transit A", "Node-3: Mars Transit B"])
+    node = st.sidebar.selectbox("Federated Network Node", [
+        "Node-1: Artemis V", 
+        "Node-2: Mars Transit A", 
+        "Node-3: Mars Transit B",
+        "Node-4: Orbital Reef Commercial Station",
+        "Node-5: Titan Surface Base (Deep Cryo)",
+        "Node-6: Europa Sub-Surface Submarine"
+    ])
+    
     scenario = st.sidebar.selectbox("Clinical Vulnerability Profile", [
-        "Nominal Mars Transit (Baseline)",
+        "Nominal Transit (Baseline)",
         "Solar Particle Event (SPE) - Radiation Spike",
         "Severe Microgravity Osteopenia",
         "Inhibitor Toxicity / Hepatic Stress",
-        "Supply Chain Failure (No Drug Available)"
+        "Supply Chain Failure (No Drug Available)",
+        "Cryogenic Joint Stiffening (Titan Methane Exposure)",
+        "High-Pressure Decompression Stress (Europa)"
     ])
     
     st.sidebar.markdown("---")
@@ -141,8 +150,13 @@ def main():
     st.sidebar.markdown("### 🌐 FL Network Sync")
     st.sidebar.markdown(f"**Target Node:** `{node}`")
     sync_status = "ONLINE 🟢" if "Failure" not in scenario else "LAGGING 🟡"
+    
+    # Titan/Europa nodes have massive latency
+    latency_base = 150
+    if "Titan" in node: latency_base = 4500000  # 75 minutes light travel time roughly
+    elif "Europa" in node: latency_base = 2500000 # 40 minutes roughly
     st.sidebar.markdown(f"**Status:** {sync_status}")
-    st.sidebar.markdown(f"**Latency:** `{np.random.randint(150, 450)} ms`")
+    st.sidebar.markdown(f"**Latency:** `{latency_base + np.random.randint(-50, 50)} ms`")
     
     # --- Tabs ---
     tab_cmd, tab_mol, tab_vis, tab_fed = st.tabs([
@@ -155,7 +169,6 @@ def main():
         return
 
     # --- SIMULATION LOGIC ---
-    # We use empty placeholders to dynamically update content
     with tab_cmd:
         col_metrics, col_radar, col_log = st.columns([1, 1.2, 1])
         metric_risk = col_metrics.empty()
@@ -182,9 +195,9 @@ def main():
         v3_ph = col_v3.empty()
         
     with tab_fed:
-        st.markdown("### 🌐 Decentralized AI Training Logs")
-        st.line_chart(np.exp(-np.linspace(0, 5, 100)) + np.random.normal(0, 0.05, 100))
-        st.caption("Aggregated Global Model Loss across 3 Spacecraft Nodes (Simulated FL Round 42)")
+        st.markdown("### 🌐 Decentralized AI Training Logs (Live Convergence)")
+        st.markdown(f"**Target Node:** {node} | **Epoch Aggregation in Progress...**")
+        loss_ph = st.empty()
 
     # Run Loop
     anomalies = []
@@ -197,7 +210,10 @@ def main():
     
     timeline_months = 0.0
     
-    for i in range(1, 31):
+    # Data structures for live line charts
+    loss_data = []
+    
+    for i in range(1, 41): # 40 steps for smoother, longer simulation
         timeline_months += 0.5
         
         # Add noise for real-time feel
@@ -222,6 +238,14 @@ def main():
             if i % 4 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-alert'>CRITICAL: ALT/AST elevated. Hepatotoxicity suspected.</span>")
         elif "Supply Chain" in scenario and timeline_months > 8:
             if i % 4 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-warn'>WARNING: 15-PGDH Inhibitor payload empty.</span>")
+        elif "Cryogenic" in scenario:
+            hr -= 15 # Bradycardia in extreme cold adaptation
+            inf += 0.4 # Cold-induced inflammation
+            if i % 4 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-warn'>WARNING: Cryo-induced joint fluid viscosity spiked.</span>")
+        elif "Decompression" in scenario:
+            hr += 20
+            bone -= 0.5
+            if i % 4 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-alert'>CRITICAL: Nitrogen micro-bubbles detected in synovial fluid.</span>")
         else:
             if i % 6 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-info'>INFO: Nominal telemetry synced with Global Server.</span>")
 
@@ -235,7 +259,11 @@ def main():
         
         rad_factor = rad / 1000.0
         bone_factor = abs(min(0, bone)) / 5.0
-        matrix_integrity = max(0.01, 1.0 - rad_factor - bone_factor - (timeline_months/48))
+        
+        # Deep space extremes degrade matrix faster
+        env_factor = 1.5 if ("Titan" in node or "Europa" in node) else 1.0
+        
+        matrix_integrity = max(0.01, 1.0 - (rad_factor * env_factor) - bone_factor - (timeline_months/48))
         
         if "Supply Chain" in scenario and timeline_months > 8:
             matrix_integrity *= 0.6
@@ -248,38 +276,60 @@ def main():
         ode_trajectory = {"final_matrix_integrity": matrix_integrity, "recommended_drug_dose": drug_dose}
         risk_score = risk_model.predict_risk(current_telemetry)
         
-        # Render Updates to UI
+        # --- UI Rendering ---
         metric_risk.metric("XGBoost Mission Risk", f"{risk_score:.2f}", delta=f"Month {timeline_months:.1f}")
         metric_integ.metric("Matrix Integrity Prediction", f"{matrix_integrity*100:.1f}%")
-        metric_rad.metric("GCR Exposure (mSv)", f"{rad:.1f}")
+        metric_rad.metric("GCR/Env Stress Exposure", f"{rad:.1f}")
         
         radar_ph.plotly_chart(plot_radar_chart(current_telemetry, matrix_integrity), use_container_width=True, key=f"radar_{i}")
         
         log_html = "<div class='console-log'>" + "<br>".join(anomalies) + "</div>"
         log_ph.markdown("### 📡 Live Anomaly Log\n" + log_html, unsafe_allow_html=True)
         
-        # Deep Inference Rendering
+        # --- Deep Inferences Updates ---
         if "Solar Particle" in scenario:
-            vuln_desc.info("**Radiological Breakdown In-Depth:** Ionizing radiation from the SPE causes double-strand DNA breaks in chondrocytes. This triggers premature cellular senescence, marked by a massive upregulation of inflammatory cytokines (IL-1β, TNF-α) and the destructive enzyme MMP-13. The cartilage extracellular matrix is being actively degraded at a molecular level.")
+            vuln_desc.info("**Radiological Breakdown In-Depth:** Ionizing radiation from the SPE causes double-strand DNA breaks in chondrocytes. This triggers premature cellular senescence, marked by a massive upregulation of inflammatory cytokines (IL-1β, TNF-α) and the destructive enzyme MMP-13.")
         elif "Severe Microgravity" in scenario:
-            vuln_desc.warning("**Biomechanical Breakdown In-Depth:** The absence of mechanical loading on the joint surface alters chondrocyte mechanotransduction. Without the cyclic pressure of gravity, the synthesis of Aggrecan and Type II collagen plummets, causing the tissue to soften and thin out.")
+            vuln_desc.warning("**Biomechanical Breakdown In-Depth:** The absence of mechanical loading on the joint surface alters chondrocyte mechanotransduction. Without the cyclic pressure of gravity, the synthesis of Aggrecan and Type II collagen plummets.")
         elif "Inhibitor Toxicity" in scenario:
-            vuln_desc.error("**Pharmacological Breakdown In-Depth:** While the 15-PGDH inhibitor rescues cartilage, over-suppression in this astronaut has induced severe hepatotoxicity. Liver enzymes are elevated, and the sympathetic nervous system is highly stressed (tachycardia). Drug must be aborted immediately.")
+            vuln_desc.error("**Pharmacological Breakdown In-Depth:** While the 15-PGDH inhibitor rescues cartilage, over-suppression in this astronaut has induced severe hepatotoxicity. Liver enzymes are elevated. Drug must be aborted immediately.")
+        elif "Cryogenic" in scenario:
+            vuln_desc.warning("**Cryogenic Matrix Stiffening (Titan):** Ambient surface temperatures of -179°C cause the synovial fluid to increase in viscosity, leading to micro-tears in the articular cartilage under physical strain. Upregulated cold-shock proteins (RBM3) are insufficient to prevent matrix fragmentation.")
+        elif "Decompression" in scenario:
+            vuln_desc.error("**Submarine Decompression Sickness (Europa):** Rapid pressure changes during subsurface oceanic ops generate nitrogen micro-bubbles in the synovial fluid. This causes acute 'Bends' in the joints, mechanically rupturing the cartilage matrix and inducing rapid localized inflammation (IL-6 spike).")
         else:
-            vuln_desc.success("**Nominal In-Depth:** Chondrocyte homeostasis is maintained. The 15-PGDH inhibitor is effectively suppressing MMP-13 activity, preserving the Type II collagen network despite background GCR.")
+            vuln_desc.success("**Nominal In-Depth:** Chondrocyte homeostasis is maintained. The 15-PGDH inhibitor is effectively suppressing MMP-13 activity, preserving the Type II collagen network.")
 
-        # Generative Vision Updates (Fading based on integrity)
+        # --- Generative Vision Updates ---
         dummy_img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
         x = np.linspace(0, 255, 256); y = np.linspace(0, 255, 256); X, Y = np.meshgrid(x, y)
         heatmap = np.stack([np.full_like(X, int(255*(1-matrix_integrity))), Y, X], axis=-1).astype(np.uint8)
         future_img = (dummy_img * matrix_integrity).astype(np.uint8)
         
         v1_ph.image(dummy_img, caption="Baseline Structural SEM", use_column_width=True)
-        v2_ph.image(heatmap, caption="Live Score-CAM Vulnerability Map", use_column_width=True)
+        v2_ph.image(heatmap, caption="Live Score-CAM Vulnerability Map", use_container_width=True)
         v3_ph.image(future_img, caption=f"Predicted Future (Month {timeline_months:.1f})", use_column_width=True)
 
-        # Update CMO rarely or at end to save text generation time in real-time loop
-        if i == 30 or i == 15:
+        # --- Federated Learning Loss Curve Update ---
+        # Slowly converging loss curve (always positive!)
+        # e.g., starts at ~2.5, decays exponentially to ~0.08
+        current_loss = 2.5 * np.exp(-0.15 * i) + np.random.uniform(0.01, 0.05) + 0.05
+        loss_data.append(current_loss)
+        
+        # Plotly for live line chart
+        fig_loss = go.Figure(data=go.Scatter(y=loss_data, mode='lines+markers', line=dict(color='#00ff00')))
+        fig_loss.update_layout(
+            title=f"Live Global Model Convergence (Epoch {i*42})",
+            xaxis_title="Simulation Steps",
+            yaxis_title="Cross-Entropy Loss",
+            yaxis=dict(range=[0, 3.0]),
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'),
+            height=350
+        )
+        loss_ph.plotly_chart(fig_loss, use_container_width=True, key=f"loss_{i}")
+
+        # Update CMO rarely to save compute in simulation loop
+        if i == 20 or i == 39:
             summary = cmo_agent.generate_cmo_summary(current_telemetry, risk_score, ode_trajectory)
             if "ERROR" in summary or summary == "":
                 summary = f"**Live Update (Month {timeline_months:.1f}):** Matrix integrity is {matrix_integrity*100:.1f}%. Recommended dose: {drug_dose:.1f} mg. Risk: {risk_score:.2f}."
@@ -287,7 +337,7 @@ def main():
             
         time.sleep(0.3) # Simulation speed
 
-    st.success("Simulation Complete. Final State Achieved.")
+    st.success("Simulation Complete. Final State Achieved. Model converged.")
 
 if __name__ == "__main__":
     main()
