@@ -76,4 +76,4 @@ pip install -r requirements.txt
 python -m streamlit run app/main.py
 ```
 
-4. Navigate to `http://localhost:8501` to access the Command Center and initiate the Real-Time Simulation!
+4. Navigate to `https://chondrozero-g-twin-zhy2jbuy8hsq3mdfw6bjwx.streamlit.app/` to access the Command Center and initiate the Real-Time Simulation!
