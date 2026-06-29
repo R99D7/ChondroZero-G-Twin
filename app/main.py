@@ -4,47 +4,39 @@ import pandas as pd
 import plotly.graph_objects as go
 import time
 from datetime import datetime
-
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.predictive_model import PredictiveRiskModel
 from src.medical_agent import MedicalLLMAgent
 
 st.set_page_config(layout="wide", page_title="ChondroZero-G Command Center", page_icon="🌌", initial_sidebar_state="expanded")
 
-# --- Custom CSS (Glassmorphism & Deep Space Theme) ---
+# --- Custom CSS ---
 st.markdown("""
     <style>
-    /* Main Background */
     .stApp {
         background: radial-gradient(circle at 10% 20%, rgb(14, 17, 30) 0%, rgb(0, 0, 0) 100%);
         color: #e0e6ed;
     }
-    
-    /* Sidebar Styling */
     [data-testid="stSidebar"] {
         background: rgba(14, 17, 30, 0.7);
         backdrop-filter: blur(10px);
         border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
-    
-    /* Metrics and Containers (Glassmorphism) */
     div[data-testid="stMetricValue"] {
         font-size: 2rem;
         color: #00e5ff;
         text-shadow: 0px 0px 10px rgba(0, 229, 255, 0.5);
     }
-    .css-1r6slb0, .css-1y4p8pa { 
-        background: rgba(255, 255, 255, 0.05);
+    .css-1r6slb0, .css-1y4p8pa, .st-emotion-cache-12w0qpk { 
+        background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         padding: 15px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     }
-    
-    /* Custom Header Styling */
     h1, h2, h3 {
         color: #ffffff;
         font-family: 'Courier New', Courier, monospace;
@@ -54,8 +46,6 @@ st.markdown("""
         color: #00e5ff;
         text-shadow: 0 0 5px #00e5ff, 0 0 10px #00e5ff;
     }
-    
-    /* Anomaly Log Console */
     .console-log {
         background-color: #0d1117;
         color: #00ff00;
@@ -63,12 +53,14 @@ st.markdown("""
         padding: 10px;
         border-radius: 5px;
         border: 1px solid #30363d;
-        height: 150px;
+        height: 250px;
         overflow-y: scroll;
         box-shadow: inset 0 0 10px #000;
+        font-size: 0.85rem;
     }
-    .console-alert { color: #ff3333; }
-    .console-warn { color: #ffaa00; }
+    .console-alert { color: #ff3333; font-weight: bold; }
+    .console-warn { color: #ffaa00; font-weight: bold; }
+    .console-info { color: #00e5ff; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -83,10 +75,8 @@ risk_model, cmo_agent = load_models()
 
 def plot_radar_chart(telemetry, matrix_integrity):
     categories = ['Bone Density', 'GCR Load', '15-PGDH', 'Inflammation', 'Matrix Integrity']
-    
-    # Normalize values for radar (0 to 1 scale roughly)
     values = [
-        max(0, (telemetry['bone_density'] + 4) / 4.5), # -4 to 0.5 -> 0 to 1
+        max(0, (telemetry['bone_density'] + 4) / 4.5), 
         min(1, telemetry['radiation'] / 1000.0), 
         min(1, telemetry['pgdh'] / 10.0),
         min(1, telemetry.get('inflammation_score', 0.5)),
@@ -95,11 +85,8 @@ def plot_radar_chart(telemetry, matrix_integrity):
     
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
-        r=values,
-        theta=categories,
-        fill='toself',
-        fillcolor='rgba(0, 229, 255, 0.3)',
-        line=dict(color='#00e5ff'),
+        r=values, theta=categories, fill='toself',
+        fillcolor='rgba(0, 229, 255, 0.3)', line=dict(color='#00e5ff'),
         name='Current Biomarker State'
     ))
     
@@ -108,22 +95,39 @@ def plot_radar_chart(telemetry, matrix_integrity):
             radialaxis=dict(visible=True, range=[0, 1], gridcolor='rgba(255,255,255,0.2)'),
             bgcolor='rgba(0,0,0,0)'
         ),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white'),
-        margin=dict(l=20, r=20, t=20, b=20),
-        height=300
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white'), margin=dict(l=20, r=20, t=20, b=20), height=300
+    )
+    return fig
+
+def plot_3d_surface():
+    """Generates a 3D surface plot for deep inferences."""
+    time_ax = np.linspace(0, 24, 30)
+    rad_ax = np.linspace(0, 1000, 30)
+    T, R = np.meshgrid(time_ax, rad_ax)
+    # Simulated Integrity Surface Z
+    Z = np.clip(1.0 - (R / 1000.0)**2 - (T / 48.0), 0, 1)
+    
+    fig = go.Figure(data=[go.Surface(z=Z, x=T, y=R, colorscale='Viridis')])
+    fig.update_layout(
+        title='Cartilage Matrix Integrity Surface',
+        scene=dict(
+            xaxis_title='Time (Months)',
+            yaxis_title='Radiation (mSv)',
+            zaxis_title='Integrity (0-1)'
+        ),
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white'), margin=dict(l=0, r=0, b=0, t=30), height=400
     )
     return fig
 
 def main():
-    st.markdown("<h1 style='text-align: center;'><span class='neon-text'>ChondroZero-G</span> Autonomous Digital Twin V2</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'><span class='neon-text'>ChondroZero-G</span> Autonomous Digital Twin V3</h1>", unsafe_allow_html=True)
     
     # --- Sidebar ---
     st.sidebar.markdown("### 🎛️ Mission Controls")
     node = st.sidebar.selectbox("Federated Network Node", ["Node-1: Artemis V", "Node-2: Mars Transit A", "Node-3: Mars Transit B"])
-    
-    scenario = st.sidebar.selectbox("Clinical Scenario Injection", [
+    scenario = st.sidebar.selectbox("Clinical Vulnerability Profile", [
         "Nominal Mars Transit (Baseline)",
         "Solar Particle Event (SPE) - Radiation Spike",
         "Severe Microgravity Osteopenia",
@@ -131,170 +135,159 @@ def main():
         "Supply Chain Failure (No Drug Available)"
     ])
     
-    timeline = st.sidebar.slider("Mission Timeline (Months)", 0, 24, 6)
-    
-    # Network Status UI
     st.sidebar.markdown("---")
+    start_sim = st.sidebar.button("🚀 LAUNCH REAL-TIME SIMULATION", use_container_width=True, type="primary")
+    
     st.sidebar.markdown("### 🌐 FL Network Sync")
     st.sidebar.markdown(f"**Target Node:** `{node}`")
     sync_status = "ONLINE 🟢" if "Failure" not in scenario else "LAGGING 🟡"
     st.sidebar.markdown(f"**Status:** {sync_status}")
     st.sidebar.markdown(f"**Latency:** `{np.random.randint(150, 450)} ms`")
-    st.sidebar.markdown(f"**Global Weights Aggregated:** `{timeline * 42} epochs`")
+    
+    # --- Tabs ---
+    tab_cmd, tab_mol, tab_vis, tab_fed = st.tabs([
+        "🛰️ Command Center", "🧬 Deep Molecular Inference", "🔬 Generative Vision Lab", "⚙️ Federated Analytics"
+    ])
+    
+    if not start_sim:
+        with tab_cmd:
+            st.info("System Standby. Click 'LAUNCH REAL-TIME SIMULATION' in the sidebar to begin dynamic telemetry streaming.")
+        return
 
-    # --- Telemetry Simulation Logic ---
-    np.random.seed(hash(node + scenario) % (2**32 - 1) + timeline)
-    
-    current_telemetry = {
-        'heart_rate': np.random.uniform(60, 80),
-        'bone_density': np.random.uniform(-1.5, 0.0),
-        'radiation': np.random.uniform(50, 150) * (timeline / 6),
-        'pgdh': np.random.uniform(2, 5),
-        'inflammation_score': np.random.uniform(0.2, 0.5)
-    }
-    
+    # --- SIMULATION LOGIC ---
+    # We use empty placeholders to dynamically update content
+    with tab_cmd:
+        col_metrics, col_radar, col_log = st.columns([1, 1.2, 1])
+        metric_risk = col_metrics.empty()
+        metric_integ = col_metrics.empty()
+        metric_rad = col_metrics.empty()
+        
+        radar_ph = col_radar.empty()
+        log_ph = col_log.empty()
+        
+        st.markdown("---")
+        st.markdown("### 🤖 Autonomous Medical Agent (Live Updates)")
+        cmo_ph = st.empty()
+        
+    with tab_mol:
+        st.markdown("### 🔬 Biological Vulnerability Deep-Dive")
+        vuln_desc = st.empty()
+        st.plotly_chart(plot_3d_surface(), use_container_width=True)
+
+    with tab_vis:
+        st.markdown("### 🧠 Predictive Vision AI (Diffusion Outputs)")
+        col_v1, col_v2, col_v3 = st.columns(3)
+        v1_ph = col_v1.empty()
+        v2_ph = col_v2.empty()
+        v3_ph = col_v3.empty()
+        
+    with tab_fed:
+        st.markdown("### 🌐 Decentralized AI Training Logs")
+        st.line_chart(np.exp(-np.linspace(0, 5, 100)) + np.random.normal(0, 0.05, 100))
+        st.caption("Aggregated Global Model Loss across 3 Spacecraft Nodes (Simulated FL Round 42)")
+
+    # Run Loop
     anomalies = []
     
-    if "Solar Particle Event" in scenario:
-        current_telemetry['radiation'] += np.random.uniform(500, 1000)
-        current_telemetry['pgdh'] += np.random.uniform(5, 10)
-        current_telemetry['inflammation_score'] = 0.95
-        anomalies.append(f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-alert'>CRITICAL: SPE Detected. Radiation flux +850%.</span>")
-    elif "Severe Microgravity" in scenario:
-        current_telemetry['bone_density'] = np.random.uniform(-3.5, -2.5)
-        current_telemetry['pgdh'] += np.random.uniform(3, 6)
-        anomalies.append(f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-warn'>WARNING: Bone Density T-Score collapsed below -2.5 threshold.</span>")
-    elif "Inhibitor Toxicity" in scenario:
-        current_telemetry['heart_rate'] = np.random.uniform(90, 120) 
-        current_telemetry['pgdh'] = np.random.uniform(0.1, 1.0) 
-        anomalies.append(f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-alert'>CRITICAL: Hepatic stress biomarkers elevated. 15-PGDH dangerously suppressed.</span>")
-    else:
-        anomalies.append(f"[{datetime.now().strftime('%H:%M:%S')}] Nominal telemetry stream received.")
-        
-    rad_factor = current_telemetry['radiation'] / 1000.0
-    bone_factor = abs(min(0, current_telemetry['bone_density'])) / 5.0
-    matrix_integrity = max(0.01, 1.0 - rad_factor - bone_factor - (timeline/48))
+    # Base telemetry for the simulation
+    base_hr = 70
+    base_bone = -0.5
+    base_rad = 50
+    base_pgdh = 3.0
     
-    if "Supply Chain Failure" in scenario:
-        recommended_drug_dose = 0.0
-        matrix_integrity *= 0.5
-        anomalies.append(f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-warn'>WARNING: Dispenser inventory query failed. Drug unavailable.</span>")
-    elif "Inhibitor Toxicity" in scenario:
-        recommended_drug_dose = 0.0
-    else:
-        recommended_drug_dose = min(50.0, current_telemetry['pgdh'] * 2.5 + (timeline))
-
-    ode_trajectory = {
-        "final_matrix_integrity": matrix_integrity,
-        "recommended_drug_dose": recommended_drug_dose
-    }
+    timeline_months = 0.0
     
-    risk_score = risk_model.predict_risk(current_telemetry)
-    if "Supply Chain Failure" in scenario: risk_score = min(1.0, risk_score + 0.3)
-    if "Inhibitor Toxicity" in scenario: risk_score = min(1.0, risk_score + 0.4)
-    if "Solar Particle" in scenario: risk_score = min(1.0, risk_score + 0.5)
-
-    # --- Top Row: Core Metrics & Radar ---
-    col_metrics, col_radar, col_log = st.columns([1, 1.2, 1])
-    
-    with col_metrics:
-        st.markdown("### 📊 Vital Telemetry")
-        st.metric("XGBoost Mission Risk", f"{risk_score:.2f}", delta=f"{risk_score - 0.5:.2f}", delta_color="inverse")
-        st.metric("Matrix Integrity Prediction", f"{matrix_integrity*100:.1f}%")
-        st.metric("GCR Exposure (mSv)", f"{current_telemetry['radiation']:.1f}")
+    for i in range(1, 31):
+        timeline_months += 0.5
         
-    with col_radar:
-        st.markdown("### 🧬 Biomarker Profile (6-Axis)")
-        fig = plot_radar_chart(current_telemetry, matrix_integrity)
-        st.plotly_chart(fig, use_container_width=True)
+        # Add noise for real-time feel
+        hr = base_hr + np.random.uniform(-5, 5)
+        bone = base_bone + np.random.uniform(-0.1, 0.1)
+        rad = base_rad + (timeline_months * 5) + np.random.uniform(-10, 10)
+        pgdh = base_pgdh + np.random.uniform(-0.5, 0.5)
+        inf = 0.3 + np.random.uniform(-0.05, 0.05)
         
-    with col_log:
-        st.markdown("### 📡 Deep Space Anomaly Log")
-        log_html = "<div class='console-log'>" + "<br>".join(anomalies) + "</div>"
-        st.markdown(log_html, unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.metric("Recommended 15-PGDH Inhibitor", f"{recommended_drug_dose:.1f} mg")
-
-    st.markdown("---")
-
-    # --- Middle Row: CMO & Deep Inferences ---
-    st.markdown("### 🤖 Autonomous Medical Agent Insights")
-    col_cmo, col_pathways = st.columns([2, 1])
-    
-    with col_cmo:
-        with st.spinner("Synthesizing clinical recommendation..."):
-            summary = cmo_agent.generate_cmo_summary(current_telemetry, risk_score, ode_trajectory)
-            
-        if "ERROR" in summary or summary == "":
-            if "Inhibitor Toxicity" in scenario:
-                summary = f"**Simulated Summary:** ALERT - Severe hepatic stress detected. 15-PGDH is over-suppressed. HALT 15-PGDH inhibitor immediately despite {ode_trajectory['final_matrix_integrity']*100:.1f}% matrix integrity. Risk: {risk_score:.2f}."
-            elif "Supply Chain Failure" in scenario:
-                summary = f"**Simulated Summary:** WARNING - 15-PGDH inhibitor supply depleted. Matrix integrity projected to collapse to {ode_trajectory['final_matrix_integrity']*100:.1f}%. Initiate load-bearing exercise protocols and structural bracing. Risk: {risk_score:.2f}."
-            elif "Solar Particle Event" in scenario:
-                summary = f"**Simulated Summary:** CRITICAL - Massive SPE radiation dose ({current_telemetry['radiation']:.0f} mSv) detected. Accelerating cartilage breakdown. Administer maximum safe emergency dose of {ode_trajectory['recommended_drug_dose']:.1f} mg inhibitor. Risk: {risk_score:.2f}."
-            else:
-                summary = f"**Simulated Summary:** Nominal transit. Radiation: {current_telemetry['radiation']:.0f} mSv. Projected matrix integrity: {ode_trajectory['final_matrix_integrity']*100:.1f}%. Recommend maintenance dose of {ode_trajectory['recommended_drug_dose']:.1f} mg inhibitor. Risk: {risk_score:.2f}."
-        
-        st.info(summary)
-        
-    with col_pathways:
-        st.markdown("**🔬 Molecular Pathway Inferences:**")
-        if "Solar Particle" in scenario:
-            st.markdown("- ⬆️ **IL-1β & TNF-α:** Massively upregulated due to radiation.")
-            st.markdown("- ⬆️ **MMP-13:** Overexpressed, destroying Type II collagen.")
-            st.markdown("- ⬇️ **SOX9:** Downregulated (Chondrocyte apoptosis).")
-        elif "Inhibitor Toxicity" in scenario:
-            st.markdown("- ⬇️ **15-PGDH:** Critical suppression.")
-            st.markdown("- ⬆️ **ALT/AST (Simulated):** Elevated hepatic enzymes.")
+        # Apply Scenario Overrides
+        if "Solar Particle" in scenario and timeline_months > 5:
+            rad += np.random.uniform(300, 800)
+            pgdh += 4.0
+            inf = 0.9
+            if i % 3 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-alert'>CRITICAL: SPE Flux Detected. GCR +{rad:.0f} mSv.</span>")
+        elif "Severe Microgravity" in scenario:
+            bone -= (timeline_months * 0.2)
+            if i % 5 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-warn'>WARNING: Trabecular structural loss increasing.</span>")
+        elif "Inhibitor Toxicity" in scenario and timeline_months > 7:
+            hr += 30
+            pgdh = np.random.uniform(0.1, 0.5)
+            if i % 4 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-alert'>CRITICAL: ALT/AST elevated. Hepatotoxicity suspected.</span>")
+        elif "Supply Chain" in scenario and timeline_months > 8:
+            if i % 4 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-warn'>WARNING: 15-PGDH Inhibitor payload empty.</span>")
         else:
-            st.markdown("- ↔️ **IL-6:** Stable base levels.")
-            st.markdown("- ↔️ **Aggrecan:** Normal synthesis rate.")
-            st.markdown("- ⬇️ **MMP-13:** Successfully inhibited by current dosing.")
+            if i % 6 == 0: anomalies.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] <span class='console-info'>INFO: Nominal telemetry synced with Global Server.</span>")
 
-    # --- Bottom Row: Neural ODE & Vision Hub ---
-    st.markdown("---")
-    st.markdown("### 📈 Neural ODE Trajectory & Predictive Vision")
-    col_chart, col_vision = st.columns([1, 1])
-    
-    with col_chart:
-        t = np.linspace(0, timeline, 100)
-        matrix_degrad = np.exp(-0.05 * t * (current_telemetry['radiation']/200))
-        pgdh_levels = 1 - np.exp(-0.1 * t) + (current_telemetry['radiation']/1000)
-        drug_levels = np.sin(t) * 0.5 + 0.5
+        # Keep log short
+        if len(anomalies) > 15: anomalies = anomalies[:15]
+
+        current_telemetry = {
+            'heart_rate': hr, 'bone_density': bone, 'radiation': rad,
+            'pgdh': pgdh, 'inflammation_score': inf
+        }
         
-        df = pd.DataFrame({
-            'Time (Months)': t,
-            'Matrix Integrity': matrix_degrad,
-            '15-PGDH Concentration': pgdh_levels,
-            'Drug Counter-measure': drug_levels
-        }).set_index('Time (Months)')
+        rad_factor = rad / 1000.0
+        bone_factor = abs(min(0, bone)) / 5.0
+        matrix_integrity = max(0.01, 1.0 - rad_factor - bone_factor - (timeline_months/48))
         
-        st.line_chart(df, height=350)
+        if "Supply Chain" in scenario and timeline_months > 8:
+            matrix_integrity *= 0.6
+            drug_dose = 0.0
+        elif "Inhibitor Toxicity" in scenario and timeline_months > 7:
+            drug_dose = 0.0
+        else:
+            drug_dose = min(50.0, pgdh * 2.5 + timeline_months)
+            
+        ode_trajectory = {"final_matrix_integrity": matrix_integrity, "recommended_drug_dose": drug_dose}
+        risk_score = risk_model.predict_risk(current_telemetry)
         
-    with col_vision:
-        col3, col4, col5 = st.columns(3)
+        # Render Updates to UI
+        metric_risk.metric("XGBoost Mission Risk", f"{risk_score:.2f}", delta=f"Month {timeline_months:.1f}")
+        metric_integ.metric("Matrix Integrity Prediction", f"{matrix_integrity*100:.1f}%")
+        metric_rad.metric("GCR Exposure (mSv)", f"{rad:.1f}")
+        
+        radar_ph.plotly_chart(plot_radar_chart(current_telemetry, matrix_integrity), use_container_width=True, key=f"radar_{i}")
+        
+        log_html = "<div class='console-log'>" + "<br>".join(anomalies) + "</div>"
+        log_ph.markdown("### 📡 Live Anomaly Log\n" + log_html, unsafe_allow_html=True)
+        
+        # Deep Inference Rendering
+        if "Solar Particle" in scenario:
+            vuln_desc.info("**Radiological Breakdown In-Depth:** Ionizing radiation from the SPE causes double-strand DNA breaks in chondrocytes. This triggers premature cellular senescence, marked by a massive upregulation of inflammatory cytokines (IL-1β, TNF-α) and the destructive enzyme MMP-13. The cartilage extracellular matrix is being actively degraded at a molecular level.")
+        elif "Severe Microgravity" in scenario:
+            vuln_desc.warning("**Biomechanical Breakdown In-Depth:** The absence of mechanical loading on the joint surface alters chondrocyte mechanotransduction. Without the cyclic pressure of gravity, the synthesis of Aggrecan and Type II collagen plummets, causing the tissue to soften and thin out.")
+        elif "Inhibitor Toxicity" in scenario:
+            vuln_desc.error("**Pharmacological Breakdown In-Depth:** While the 15-PGDH inhibitor rescues cartilage, over-suppression in this astronaut has induced severe hepatotoxicity. Liver enzymes are elevated, and the sympathetic nervous system is highly stressed (tachycardia). Drug must be aborted immediately.")
+        else:
+            vuln_desc.success("**Nominal In-Depth:** Chondrocyte homeostasis is maintained. The 15-PGDH inhibitor is effectively suppressing MMP-13 activity, preserving the Type II collagen network despite background GCR.")
+
+        # Generative Vision Updates (Fading based on integrity)
         dummy_img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
-        x = np.linspace(0, 255, 256)
-        y = np.linspace(0, 255, 256)
-        X, Y = np.meshgrid(x, y)
-        dummy_heatmap = np.stack([X, Y, 255-X], axis=-1).astype(np.uint8)
+        x = np.linspace(0, 255, 256); y = np.linspace(0, 255, 256); X, Y = np.meshgrid(x, y)
+        heatmap = np.stack([np.full_like(X, int(255*(1-matrix_integrity))), Y, X], axis=-1).astype(np.uint8)
+        future_img = (dummy_img * matrix_integrity).astype(np.uint8)
         
-        # Color shift heatmap based on integrity
-        if matrix_integrity < 0.4:
-            dummy_heatmap = np.stack([np.full_like(X, 255), Y, X], axis=-1).astype(np.uint8) # High red
+        v1_ph.image(dummy_img, caption="Baseline Structural SEM", use_column_width=True)
+        v2_ph.image(heatmap, caption="Live Score-CAM Vulnerability Map", use_column_width=True)
+        v3_ph.image(future_img, caption=f"Predicted Future (Month {timeline_months:.1f})", use_column_width=True)
+
+        # Update CMO rarely or at end to save text generation time in real-time loop
+        if i == 30 or i == 15:
+            summary = cmo_agent.generate_cmo_summary(current_telemetry, risk_score, ode_trajectory)
+            if "ERROR" in summary or summary == "":
+                summary = f"**Live Update (Month {timeline_months:.1f}):** Matrix integrity is {matrix_integrity*100:.1f}%. Recommended dose: {drug_dose:.1f} mg. Risk: {risk_score:.2f}."
+            cmo_ph.info(summary)
             
-        with col3:
-            st.markdown("<div style='font-size:0.8rem; text-align:center;'>Current SEM</div>", unsafe_allow_html=True)
-            st.image(dummy_img, use_column_width=True)
-            
-        with col4:
-            st.markdown("<div style='font-size:0.8rem; text-align:center;'>Score-CAM</div>", unsafe_allow_html=True)
-            st.image(dummy_heatmap, use_column_width=True)
-            
-        with col5:
-            st.markdown("<div style='font-size:0.8rem; text-align:center;'>Future Prediction</div>", unsafe_allow_html=True)
-            future_img = (dummy_img * matrix_integrity).astype(np.uint8)
-            st.image(future_img, use_column_width=True)
-        
+        time.sleep(0.3) # Simulation speed
+
+    st.success("Simulation Complete. Final State Achieved.")
+
 if __name__ == "__main__":
     main()
