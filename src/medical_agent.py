@@ -1,7 +1,8 @@
-import torch
 try:
+    import torch
     from transformers import pipeline
 except ImportError:
+    torch = None
     pipeline = None
 
 class MedicalLLMAgent:
